@@ -27,12 +27,12 @@ To run this project locally, follow these steps:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/skt521/video-call-app.git
+   git clone https://github.com/SKT521/Call-Me-Maybe.git
    ```
 
 2. **Navigate to the project directory**:
    ```bash
-   cd video-call-app
+   cd Call-Me-Maybe
    ```
 
 3. **Install dependencies**:
