@@ -12,11 +12,6 @@ import {
 } from "firebase/firestore";
 import { getFirestore } from "firebase/firestore";
 
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyC1iqZeR2m-VJqSDST6RlJZYBkRJ9610Lc",
   authDomain: "videocall-app-90fea.firebaseapp.com",
@@ -40,8 +35,9 @@ const servers = {
   ],
   iceCandidatePoolSize: 10,
 };
-//Global State
-let pc = new RTCPeerConnection(servers);
+
+// Global State
+let pc: RTCPeerConnection | null = null;
 let localStream: MediaStream | null = null;
 let remoteStream: MediaStream | null = null;
 
@@ -67,12 +63,6 @@ const hangupButton = document.getElementById(
   "hangupButton"
 ) as HTMLButtonElement | null;
 
-// if (!webcamButton || !webcamVideo || !callButton || !callInput || !answerButton || !remoteVideo || !hangupButton) {
-//   console.error("Some elements are missing in the DOM");
-//   return;
-// }
-// 1. Setup media sources
-
 // Input event listener for enabling/disabling the Answer button
 callInput!.addEventListener("input", () => {
   answerButton!.disabled = !callInput!.value.trim(); // Disable if the input is empty
@@ -85,8 +75,11 @@ webcamButton!.onclick = async () => {
   });
   remoteStream = new MediaStream();
 
+  // Initialize the peer connection
+  pc = new RTCPeerConnection(servers);
+
   localStream.getTracks().forEach((track) => {
-    pc.addTrack(track, localStream!);
+    pc!.addTrack(track, localStream!);
   });
 
   pc.ontrack = (event) => {
@@ -100,8 +93,8 @@ webcamButton!.onclick = async () => {
 
   callButton!.disabled = false;
 };
-//2. Create an offer
 
+// 2. Create an offer
 callButton!.onclick = async () => {
   const callDoc = doc(collection(firestore, "calls"));
   const offerCandidates = collection(callDoc, "offerCandidates"); // Subcollection reference
@@ -109,18 +102,17 @@ callButton!.onclick = async () => {
 
   callInput!.value = callDoc.id;
 
-  //get candidate for caller, save to db
-
-  pc.onicecandidate = (event) => {
+  // Get candidate for caller, save to db
+  pc!.onicecandidate = (event) => {
     if (event.candidate) {
       // Add ICE candidate to Firestore
       addDoc(offerCandidates, event.candidate.toJSON());
     }
   };
 
-  //Make offer
-  const offerDescription = await pc.createOffer();
-  await pc.setLocalDescription(offerDescription);
+  // Make offer
+  const offerDescription = await pc!.createOffer();
+  await pc!.setLocalDescription(offerDescription);
 
   const offer = {
     sdp: offerDescription.sdp,
@@ -129,12 +121,12 @@ callButton!.onclick = async () => {
 
   await setDoc(callDoc, { offer });
 
-  //Listen for remote server
+  // Listen for remote server
   onSnapshot(callDoc, (snapshot) => {
     const data = snapshot.data();
-    if (!pc.currentRemoteDescription && data?.answer) {
+    if (!pc!.currentRemoteDescription && data?.answer) {
       const answerDescription = new RTCSessionDescription(data.answer);
-      pc.setRemoteDescription(answerDescription);
+      pc!.setRemoteDescription(answerDescription);
     }
   });
 
@@ -143,18 +135,19 @@ callButton!.onclick = async () => {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const candidate = new RTCIceCandidate(change.doc.data());
-        pc.addIceCandidate(candidate);
+        pc!.addIceCandidate(candidate);
       }
     });
   });
 };
 
+// Answer the call
 answerButton!.onclick = async () => {
   const callId = callInput!.value;
-  const callDoc = doc(collection(firestore, "calls"));
+  const callDoc = doc(firestore, "calls", callId); // Reference the call document by ID
   const answerCandidates = collection(callDoc, "answerCandidates"); // Subcollection reference
 
-  pc = new RTCPeerConnection(servers);
+  pc = new RTCPeerConnection(servers); // Create a new peer connection
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
@@ -165,8 +158,7 @@ answerButton!.onclick = async () => {
 
   // Fetch the call data from Firestore
   const callDocSnapshot = await getDoc(callDoc);
-  const callData: any = callDocSnapshot.data();
-  // const callData = (await callDoc.get()).data();
+  const callData = callDocSnapshot.data();
 
   if (!callData) {
     console.error("No call data found!");
@@ -193,7 +185,7 @@ answerButton!.onclick = async () => {
     snapshot.docChanges().forEach((change) => {
       if (change.type === "added") {
         const data = change.doc.data();
-        pc.addIceCandidate(new RTCIceCandidate(data));
+        pc!.addIceCandidate(new RTCIceCandidate(data));
       }
     });
   });
